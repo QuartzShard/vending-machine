@@ -1,6 +1,8 @@
 use futures_util::StreamExt;
+use core::fmt;
 use std::cell::{BorrowMutError, RefCell};
 use std::env;
+use tracing::info;
 use rive_models;
 use rive_http;
 use rive_autumn;
@@ -22,6 +24,7 @@ impl Bot {
 		let autumn = rive_autumn::Client::new();
 		let cache = rive_cache_inmemory::InMemoryCache::new();
 		let gateway = RefCell::new(rive_gateway::Gateway::connect(auth).await?);
+        info!("Bot init success!");
 		Ok(Bot{
 			http,
 			autumn,
@@ -43,7 +46,16 @@ pub enum BotError {
 	MissingToken,
     RefcellError
 }
-
+impl fmt::Display for BotError {
+   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+       write!(f, "Bot Error: {}", self.to_string())
+   } 
+}
+impl std::error::Error for BotError {
+   fn description(&self) -> &str {
+       "An Error in the operation of the bot"
+   } 
+}
 impl From<env::VarError> for BotError {
 	fn from(_value: env::VarError) -> Self {
 	    BotError::MissingToken
