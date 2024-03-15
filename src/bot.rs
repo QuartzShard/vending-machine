@@ -14,8 +14,10 @@ pub struct Bot {
 	http: rive_http::Client,
 	autumn: rive_autumn::Client,
 	cache: rive_cache_inmemory::InMemoryCache,
-	gateway: RefCell<rive_gateway::Gateway>
+	gateway: RefCell<rive_gateway::Gateway>,
+    pub bot_user: rive_models::user::User,
 }
+
 
 impl Bot {
 	pub async fn new(token: String) -> Result<Bot, BotError> {
@@ -24,25 +26,35 @@ impl Bot {
 		let autumn = rive_autumn::Client::new();
 		let cache = rive_cache_inmemory::InMemoryCache::new();
 		let gateway = RefCell::new(rive_gateway::Gateway::connect(auth).await?);
-        info!("Bot init success!");
-		Ok(Bot{
+        let bot_user = http.fetch_self().await?;
+        info!("Bot init success!");	
+        Ok(Bot{
 			http,
 			autumn,
 			cache,
-			gateway
+			gateway,
+            bot_user,
 		})
 	}
 	pub async fn next_event(&self) -> Result<rive_models::event::ServerEvent, BotError> {
 		match self.gateway.try_borrow_mut()?.next().await {
             Some(res) => Ok(res?),
-            None => Err(BotError::GatewayError)
+            None => Err(BotError::APIError)
         }
 	}
+    pub async fn send_message(&self, channel: String, message: String) -> Result<rive_models::message::Message, BotError> {
+        info!("Sending message: \"{}\" to channel {}", message, channel);
+        let data: rive_models::data::SendMessageData = rive_models::data::SendMessageData {
+            content: Some(message),
+            ..rive_models::data::SendMessageData::default()
+        };
+        Ok(self.http.send_message(channel, data).await?)
+    }
 }
 
 #[derive(Debug)]
 pub enum BotError {
-	GatewayError,
+	APIError,
 	MissingToken,
     RefcellError
 }
@@ -61,9 +73,14 @@ impl From<env::VarError> for BotError {
 	    BotError::MissingToken
 	}
 }
+impl From<rive_http::Error> for BotError {
+	fn from(_value: rive_http::Error) -> Self {
+	    BotError::APIError
+	}
+}
 impl From<rive_gateway::Error> for BotError {
 	fn from(_value: rive_gateway::Error) -> Self {
-	    BotError::GatewayError
+	    BotError::APIError
 	}
 }
 impl From<BorrowMutError> for BotError {
